@@ -16,6 +16,8 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 // Also it contains metrics map and query overrides.
 type Server struct {
 	db          *sql.DB
+	dbName      string
 	labels      prometheus.Labels
 	master      bool
 	runonserver string
@@ -75,6 +78,7 @@ func NewServer(dsn string, opts ...ServerOpt) (*Server, error) {
 
 	s := &Server{
 		db:     db,
+		dbName: getDbName(dsn),
 		master: false,
 		labels: prometheus.Labels{
 			serverLabelName: fingerprint,
@@ -87,6 +91,18 @@ func NewServer(dsn string, opts ...ServerOpt) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+func getDbName(dsn string) string {
+	if strings.HasPrefix(dsn, "postgresql://") {
+		dsnURI, err := url.Parse(dsn)
+		if err != nil {
+			level.Debug(logger).Log("msg", "Unable to parse DSN as URI", "dsn", loggableDSN(dsn), "err", err)
+			return ""
+		}
+		return strings.TrimPrefix(dsnURI.Path, "/")
+	}
+	return ""
 }
 
 // Close disconnects from Postgres.

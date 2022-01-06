@@ -29,6 +29,7 @@ type UserQuery struct {
 	Master       bool      `yaml:"master"`        // Querying only for master database
 	CacheSeconds uint64    `yaml:"cache_seconds"` // Number of seconds to cache the namespace result metrics for.
 	RunOnServer  string    `yaml:"runonserver"`   // Querying to run on which server version
+	Databases    []string  `yaml:"databases"`     // Databases to run queries on.
 }
 
 // UserQueries represents a set of UserQuery objects
@@ -220,6 +221,7 @@ func parseUserQueries(content []byte) (map[string]intermediateMetricMap, map[str
 				columnMappings: newMetricMap,
 				master:         specs.Master,
 				cacheSeconds:   specs.CacheSeconds,
+				databases:      specs.Databases,
 			}
 			metricMaps[metric] = metricMap
 		}
@@ -255,6 +257,18 @@ func addQueries(content []byte, pgVersion semver.Version, server *Server) error 
 	if err != nil {
 		return err
 	}
+
+	for k, metricMap := range metricMaps {
+		if len(metricMap.databases) == 0 || server.dbName == "" {
+			continue
+		}
+		// If database server is not among metric databases - skip.
+		if ok := contains(metricMap.databases, server.dbName); !ok {
+			level.Debug(logger).Log("msg", "Removing query from a server", "metric", k)
+			delete(metricMaps, k)
+		}
+	}
+
 	// Convert the loaded metric map into exporter representation
 	partialExporterMap := makeDescMap(pgVersion, server.labels, metricMaps)
 

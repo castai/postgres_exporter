@@ -112,6 +112,7 @@ type intermediateMetricMap struct {
 	columnMappings map[string]ColumnMapping
 	master         bool
 	cacheSeconds   uint64
+	databases      []string
 }
 
 // MetricMapNamespace groups metric maps under a shared set of labels.
@@ -179,6 +180,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 	"pg_stat_database": {
 		map[string]ColumnMapping{
@@ -204,6 +206,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 	"pg_stat_database_conflicts": {
 		map[string]ColumnMapping{
@@ -217,6 +220,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 	"pg_locks": {
 		map[string]ColumnMapping{
@@ -226,6 +230,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 	"pg_stat_replication": {
 		map[string]ColumnMapping{
@@ -272,6 +277,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 	"pg_replication_slots": {
 		map[string]ColumnMapping{
@@ -282,6 +288,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 	"pg_stat_archiver": {
 		map[string]ColumnMapping{
@@ -296,6 +303,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 	"pg_stat_activity": {
 		map[string]ColumnMapping{
@@ -306,6 +314,7 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		},
 		true,
 		0,
+		nil,
 	},
 }
 
@@ -672,7 +681,6 @@ func (e *Exporter) checkMapVersions(ch chan<- prometheus.Metric, server *Server)
 		}
 
 		server.lastMapVersion = semanticVersion
-
 		if e.userQueriesPath != "" {
 			// Clear the metric while a reload is happening
 			e.userQueriesError.Reset()
@@ -684,7 +692,6 @@ func (e *Exporter) checkMapVersions(ch chan<- prometheus.Metric, server *Server)
 				e.userQueriesError.WithLabelValues(e.userQueriesPath, "").Set(1)
 			} else {
 				hashsumStr := fmt.Sprintf("%x", sha256.Sum256(userQueriesData))
-
 				if err := addQueries(userQueriesData, semanticVersion, server); err != nil {
 					level.Error(logger).Log("msg", "Failed to reload user queries", "path", e.userQueriesPath, "err", err)
 					e.userQueriesError.WithLabelValues(e.userQueriesPath, hashsumStr).Set(1)

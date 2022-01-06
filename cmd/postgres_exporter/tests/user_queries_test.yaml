@@ -1,4 +1,6 @@
 random:
+  databases:
+    - circle_test
   query: |
     WITH data AS (SELECT floor(random()*10) AS d FROM generate_series(1,100)),
          metrics AS (SELECT SUM(d) AS sum, COUNT(*) AS count FROM data),
