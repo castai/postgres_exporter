@@ -133,6 +133,7 @@ func (s *IntegrationSuite) TestUnknownMetricParsingDoesntCrash(c *C) {
 			map[string]ColumnMapping{},
 			true,
 			0,
+			nil,
 		}
 	}
 	exporter.builtinMetricMaps = emptyMaps
@@ -156,7 +157,8 @@ func (s *IntegrationSuite) TestExtendQueriesDoesntCrash(c *C) {
 
 	exporter := NewExporter(
 		strings.Split(dsn, ","),
-		WithUserQueriesPath("../user_queries_test.yaml"),
+		WithUserQueriesPath("./tests/user_queries_test.yaml"),
+		AutoDiscoverDatabases(true),
 	)
 	c.Assert(exporter, NotNil)
 
