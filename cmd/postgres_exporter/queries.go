@@ -17,8 +17,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/blang/semver"
-	"github.com/go-kit/kit/log/level"
+	"github.com/blang/semver/v4"
+	"github.com/go-kit/log/level"
 	"gopkg.in/yaml.v2"
 )
 
@@ -47,31 +47,6 @@ type OverrideQuery struct {
 // Overriding queries for namespaces above.
 // TODO: validate this is a closed set in tests, and there are no overlaps
 var queryOverrides = map[string][]OverrideQuery{
-	"pg_locks": {
-		{
-			semver.MustParseRange(">0.0.0"),
-			`SELECT pg_database.datname,tmp.mode,COALESCE(count,0) as count
-			FROM
-				(
-				  VALUES ('accesssharelock'),
-				         ('rowsharelock'),
-				         ('rowexclusivelock'),
-				         ('shareupdateexclusivelock'),
-				         ('sharelock'),
-				         ('sharerowexclusivelock'),
-				         ('exclusivelock'),
-				         ('accessexclusivelock'),
-					 ('sireadlock')
-				) AS tmp(mode) CROSS JOIN pg_database
-			LEFT JOIN
-			  (SELECT database, lower(mode) AS mode,count(*) AS count
-			  FROM pg_locks WHERE database IS NOT NULL
-			  GROUP BY database, lower(mode)
-			) AS tmp2
-			ON tmp.mode=tmp2.mode and pg_database.oid = tmp2.database ORDER BY 1`,
-		},
-	},
-
 	"pg_stat_replication": {
 		{
 			semver.MustParseRange(">=10.0.0"),
@@ -121,7 +96,7 @@ var queryOverrides = map[string][]OverrideQuery{
 
 	"pg_stat_archiver": {
 		{
-			semver.MustParseRange(">=0.0.0"),
+			semver.MustParseRange(">=9.4.0"),
 			`
 			SELECT *,
 				extract(epoch from now() - last_archived_time) AS last_archive_age
@@ -138,6 +113,8 @@ var queryOverrides = map[string][]OverrideQuery{
 			SELECT
 				pg_database.datname,
 				tmp.state,
+				tmp2.usename,
+				tmp2.application_name,
 				COALESCE(count,0) as count,
 				COALESCE(max_tx_duration,0) as max_tx_duration
 			FROM
@@ -154,9 +131,11 @@ var queryOverrides = map[string][]OverrideQuery{
 				SELECT
 					datname,
 					state,
+					usename,
+					application_name,
 					count(*) AS count,
 					MAX(EXTRACT(EPOCH FROM now() - xact_start))::float AS max_tx_duration
-				FROM pg_stat_activity GROUP BY datname,state) AS tmp2
+				FROM pg_stat_activity GROUP BY datname,state,usename,application_name) AS tmp2
 				ON tmp.state = tmp2.state AND pg_database.datname = tmp2.datname
 			`,
 		},
@@ -166,9 +145,11 @@ var queryOverrides = map[string][]OverrideQuery{
 			SELECT
 				datname,
 				'unknown' AS state,
+				usename,
+				application_name,
 				COALESCE(count(*),0) AS count,
 				COALESCE(MAX(EXTRACT(EPOCH FROM now() - xact_start))::float,0) AS max_tx_duration
-			FROM pg_stat_activity GROUP BY datname
+			FROM pg_stat_activity GROUP BY datname,usename,application_name
 			`,
 		},
 	},

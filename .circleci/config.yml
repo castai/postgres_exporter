@@ -2,13 +2,13 @@
 version: 2.1
 
 orbs:
-  prometheus: prometheus/prometheus@0.11.0
+  prometheus: prometheus/prometheus@0.17.1
 
 executors:
   # This must match .promu.yml.
   golang:
     docker:
-    - image: circleci/golang:1.16
+    - image: cimg/go:1.20
 
 jobs:
   test:
@@ -16,13 +16,14 @@ jobs:
 
     steps:
     - prometheus/setup_environment
+    - run: GOHOSTARCH=386 GOARCH=386 make test
     - run: make
     - prometheus/store_artifact:
         file: postgres_exporter
 
   integration:
     docker:
-    - image: circleci/golang:1.16
+    - image: cimg/go:1.20
     - image: << parameters.postgres_image >>
       environment:
         POSTGRES_DB: circle_test
@@ -56,25 +57,36 @@ workflows:
         matrix:
           parameters:
             postgres_image:
-            - circleci/postgres:9.4
-            - circleci/postgres:9.5
-            - circleci/postgres:9.6
             - circleci/postgres:10
             - circleci/postgres:11
             - circleci/postgres:12
             - circleci/postgres:13
+            - cimg/postgres:14.1
+            - cimg/postgres:15.1
     - prometheus/build:
         name: build
+        parallelism: 3
+        promu_opts: "-p linux/amd64 -p windows/amd64 -p linux/arm64 -p darwin/amd64 -p darwin/arm64 -p linux/386"
         filters:
           tags:
-            only: /.*/
+            ignore: /^v.*/
+          branches:
+            ignore: /^(main|master|release-.*|.*build-all.*)$/
+    - prometheus/build:
+        name: build_all
+        parallelism: 12
+        filters:
+          branches:
+            only: /^(main|master|release-.*|.*build-all.*)$/
+          tags:
+            only: /^v.*/
     - prometheus/publish_master:
         context: org-context
         docker_hub_organization: prometheuscommunity
         quay_io_organization: prometheuscommunity
         requires:
         - test
-        - build
+        - build_all
         filters:
           branches:
             only: master
@@ -84,7 +96,7 @@ workflows:
         quay_io_organization: prometheuscommunity
         requires:
         - test
-        - build
+        - build_all
         filters:
           tags:
             only: /^v.*/

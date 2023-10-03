@@ -18,14 +18,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/blang/semver"
-	"github.com/go-kit/kit/log/level"
+	"github.com/blang/semver/v4"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -164,50 +164,6 @@ func dumpMaps() {
 }
 
 var builtinMetricMaps = map[string]intermediateMetricMap{
-	"pg_stat_bgwriter": {
-		map[string]ColumnMapping{
-			"checkpoints_timed":     {COUNTER, "Number of scheduled checkpoints that have been performed", nil, nil},
-			"checkpoints_req":       {COUNTER, "Number of requested checkpoints that have been performed", nil, nil},
-			"checkpoint_write_time": {COUNTER, "Total amount of time that has been spent in the portion of checkpoint processing where files are written to disk, in milliseconds", nil, nil},
-			"checkpoint_sync_time":  {COUNTER, "Total amount of time that has been spent in the portion of checkpoint processing where files are synchronized to disk, in milliseconds", nil, nil},
-			"buffers_checkpoint":    {COUNTER, "Number of buffers written during checkpoints", nil, nil},
-			"buffers_clean":         {COUNTER, "Number of buffers written by the background writer", nil, nil},
-			"maxwritten_clean":      {COUNTER, "Number of times the background writer stopped a cleaning scan because it had written too many buffers", nil, nil},
-			"buffers_backend":       {COUNTER, "Number of buffers written directly by a backend", nil, nil},
-			"buffers_backend_fsync": {COUNTER, "Number of times a backend had to execute its own fsync call (normally the background writer handles those even when the backend does its own write)", nil, nil},
-			"buffers_alloc":         {COUNTER, "Number of buffers allocated", nil, nil},
-			"stats_reset":           {COUNTER, "Time at which these statistics were last reset", nil, nil},
-		},
-		true,
-		0,
-		nil,
-	},
-	"pg_stat_database": {
-		map[string]ColumnMapping{
-			"datid":          {LABEL, "OID of a database", nil, nil},
-			"datname":        {LABEL, "Name of this database", nil, nil},
-			"numbackends":    {GAUGE, "Number of backends currently connected to this database. This is the only column in this view that returns a value reflecting current state; all other columns return the accumulated values since the last reset.", nil, nil},
-			"xact_commit":    {COUNTER, "Number of transactions in this database that have been committed", nil, nil},
-			"xact_rollback":  {COUNTER, "Number of transactions in this database that have been rolled back", nil, nil},
-			"blks_read":      {COUNTER, "Number of disk blocks read in this database", nil, nil},
-			"blks_hit":       {COUNTER, "Number of times disk blocks were found already in the buffer cache, so that a read was not necessary (this only includes hits in the PostgreSQL buffer cache, not the operating system's file system cache)", nil, nil},
-			"tup_returned":   {COUNTER, "Number of rows returned by queries in this database", nil, nil},
-			"tup_fetched":    {COUNTER, "Number of rows fetched by queries in this database", nil, nil},
-			"tup_inserted":   {COUNTER, "Number of rows inserted by queries in this database", nil, nil},
-			"tup_updated":    {COUNTER, "Number of rows updated by queries in this database", nil, nil},
-			"tup_deleted":    {COUNTER, "Number of rows deleted by queries in this database", nil, nil},
-			"conflicts":      {COUNTER, "Number of queries canceled due to conflicts with recovery in this database. (Conflicts occur only on standby servers; see pg_stat_database_conflicts for details.)", nil, nil},
-			"temp_files":     {COUNTER, "Number of temporary files created by queries in this database. All temporary files are counted, regardless of why the temporary file was created (e.g., sorting or hashing), and regardless of the log_temp_files setting.", nil, nil},
-			"temp_bytes":     {COUNTER, "Total amount of data written to temporary files by queries in this database. All temporary files are counted, regardless of why the temporary file was created, and regardless of the log_temp_files setting.", nil, nil},
-			"deadlocks":      {COUNTER, "Number of deadlocks detected in this database", nil, nil},
-			"blk_read_time":  {COUNTER, "Time spent reading data file blocks by backends in this database, in milliseconds", nil, nil},
-			"blk_write_time": {COUNTER, "Time spent writing data file blocks by backends in this database, in milliseconds", nil, nil},
-			"stats_reset":    {COUNTER, "Time at which these statistics were last reset", nil, nil},
-		},
-		true,
-		0,
-		nil,
-	},
 	"pg_stat_database_conflicts": {
 		map[string]ColumnMapping{
 			"datid":            {LABEL, "OID of a database", nil, nil},
@@ -222,27 +178,17 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 		0,
 		nil,
 	},
-	"pg_locks": {
-		map[string]ColumnMapping{
-			"datname": {LABEL, "Name of this database", nil, nil},
-			"mode":    {LABEL, "Type of Lock", nil, nil},
-			"count":   {GAUGE, "Number of locks", nil, nil},
-		},
-		true,
-		0,
-		nil,
-	},
 	"pg_stat_replication": {
 		map[string]ColumnMapping{
-			"procpid":          {DISCARD, "Process ID of a WAL sender process", nil, semver.MustParseRange("<9.2.0")},
-			"pid":              {DISCARD, "Process ID of a WAL sender process", nil, semver.MustParseRange(">=9.2.0")},
-			"usesysid":         {DISCARD, "OID of the user logged into this WAL sender process", nil, nil},
-			"usename":          {DISCARD, "Name of the user logged into this WAL sender process", nil, nil},
-			"application_name": {LABEL, "Name of the application that is connected to this WAL sender", nil, nil},
-			"client_addr":      {LABEL, "IP address of the client connected to this WAL sender. If this field is null, it indicates that the client is connected via a Unix socket on the server machine.", nil, nil},
-			"client_hostname":  {DISCARD, "Host name of the connected client, as reported by a reverse DNS lookup of client_addr. This field will only be non-null for IP connections, and only when log_hostname is enabled.", nil, nil},
-			"client_port":      {DISCARD, "TCP port number that the client is using for communication with this WAL sender, or -1 if a Unix socket is used", nil, nil},
-			"backend_start": {DISCARD, "with time zone	Time when this process was started, i.e., when the client connected to this WAL sender", nil, nil},
+			"procpid":                  {DISCARD, "Process ID of a WAL sender process", nil, semver.MustParseRange("<9.2.0")},
+			"pid":                      {DISCARD, "Process ID of a WAL sender process", nil, semver.MustParseRange(">=9.2.0")},
+			"usesysid":                 {DISCARD, "OID of the user logged into this WAL sender process", nil, nil},
+			"usename":                  {DISCARD, "Name of the user logged into this WAL sender process", nil, nil},
+			"application_name":         {LABEL, "Name of the application that is connected to this WAL sender", nil, nil},
+			"client_addr":              {LABEL, "IP address of the client connected to this WAL sender. If this field is null, it indicates that the client is connected via a Unix socket on the server machine.", nil, nil},
+			"client_hostname":          {DISCARD, "Host name of the connected client, as reported by a reverse DNS lookup of client_addr. This field will only be non-null for IP connections, and only when log_hostname is enabled.", nil, nil},
+			"client_port":              {DISCARD, "TCP port number that the client is using for communication with this WAL sender, or -1 if a Unix socket is used", nil, nil},
+			"backend_start":            {DISCARD, "with time zone	Time when this process was started, i.e., when the client connected to this WAL sender", nil, nil},
 			"backend_xmin":             {DISCARD, "The current backend's xmin horizon.", nil, nil},
 			"state":                    {LABEL, "Current WAL sender state", nil, nil},
 			"sent_location":            {DISCARD, "Last transaction log position sent on this connection", nil, semver.MustParseRange("<10.0.0")},
@@ -307,10 +253,12 @@ var builtinMetricMaps = map[string]intermediateMetricMap{
 	},
 	"pg_stat_activity": {
 		map[string]ColumnMapping{
-			"datname":         {LABEL, "Name of this database", nil, nil},
-			"state":           {LABEL, "connection state", nil, semver.MustParseRange(">=9.2.0")},
-			"count":           {GAUGE, "number of connections in this state", nil, nil},
-			"max_tx_duration": {GAUGE, "max duration in seconds any active transaction has been running", nil, nil},
+			"datname":          {LABEL, "Name of this database", nil, nil},
+			"state":            {LABEL, "connection state", nil, semver.MustParseRange(">=9.2.0")},
+			"usename":          {LABEL, "connection usename", nil, nil},
+			"application_name": {LABEL, "connection application_name", nil, nil},
+			"count":            {GAUGE, "number of connections in this state", nil, nil},
+			"max_tx_duration":  {GAUGE, "max duration in seconds any active transaction has been running", nil, nil},
 		},
 		true,
 		0,
@@ -508,9 +456,9 @@ func AutoDiscoverDatabases(b bool) ExporterOpt {
 }
 
 // ExcludeDatabases allows to filter out result from AutoDiscoverDatabases
-func ExcludeDatabases(s string) ExporterOpt {
+func ExcludeDatabases(s []string) ExporterOpt {
 	return func(e *Exporter) {
-		e.excludeDatabases = strings.Split(s, ",")
+		e.excludeDatabases = s
 	}
 }
 
@@ -585,14 +533,14 @@ func (e *Exporter) setupInternalMetrics() {
 		Namespace:   namespace,
 		Subsystem:   exporter,
 		Name:        "last_scrape_duration_seconds",
-		Help:        "Duration of the last scrape of metrics from PostgresSQL.",
+		Help:        "Duration of the last scrape of metrics from PostgreSQL.",
 		ConstLabels: e.constantLabels,
 	})
 	e.totalScrapes = prometheus.NewCounter(prometheus.CounterOpts{
 		Namespace:   namespace,
 		Subsystem:   exporter,
 		Name:        "scrapes_total",
-		Help:        "Total number of times PostgresSQL was scraped for metrics.",
+		Help:        "Total number of times PostgreSQL was scraped for metrics.",
 		ConstLabels: e.constantLabels,
 	})
 	e.error = prometheus.NewGauge(prometheus.GaugeOpts{
@@ -686,7 +634,7 @@ func (e *Exporter) checkMapVersions(ch chan<- prometheus.Metric, server *Server)
 			e.userQueriesError.Reset()
 
 			// Calculate the hashsum of the useQueries
-			userQueriesData, err := ioutil.ReadFile(e.userQueriesPath)
+			userQueriesData, err := os.ReadFile(e.userQueriesPath)
 			if err != nil {
 				level.Error(logger).Log("msg", "Failed to reload user queries", "path", e.userQueriesPath, "err", err)
 				e.userQueriesError.WithLabelValues(e.userQueriesPath, "").Set(1)
